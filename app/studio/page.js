@@ -1,48 +1,50 @@
+"use client";
+import { useState } from "react";
 
-'use client'
-import { useEffect, useState } from 'react';
-const BRIDGE_URL = process.env.NEXT_PUBLIC_BRIDGE_URL || '';
+const API_BASE = process.env.NEXT_PUBLIC_CI_URL;
 
-export default function Studio(){
-  const [owner,setOwner]=useState('your-github');
-  const [repo,setRepo]=useState('your-repo');
-  const [base,setBase]=useState('main');
-  const [title,setTitle]=useState('My PR from Vibe UI');
-  const [diff,setDiff]=useState('');
-  const [log,setLog]=useState('');
+export default function StudioPage() {
+  const [owner, setOwner] = useState("");
+  const [repo, setRepo] = useState("");
+  const [base, setBase] = useState("main");
+  const [title, setTitle] = useState("vibe: update");
+  const [diff, setDiff] = useState("");
+  const [log, setLog] = useState("");
 
-  useEffect(()=>{
-    if(!BRIDGE_URL) setLog('⚠️ NEXT_PUBLIC_BRIDGE_URL is not set. Go to Settings and add it in Vercel.');
-  },[]);
-
-  const submit = async ()=>{
-    setLog('Sending to bridge...');
-    try{
-      const payload={ mode:'fixed-diff', owner, repo, base, title, diff, timestamp:Math.floor(Date.now()/1000)};
-      const r = await fetch(BRIDGE_URL, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(payload) });
-      const j = await r.json();
-      setLog(JSON.stringify(j,null,2));
-    }catch(e){ setLog(String(e)); }
-  };
+  async function submit(e) {
+    e.preventDefault();
+    setLog("Submitting...");
+    try {
+      const res = await fetch(`${API_BASE}/api/bridge/proxy`, {
+        method: "POST",
+        headers: { "content-type":"application/json" },
+        body: JSON.stringify({ mode:"fixed-diff", owner, repo, base, title, diff })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setLog(`PR opened: ${data.prUrl} (#${data.prNumber})`);
+      } else {
+        setLog(`Error: ${data.error || data.errorCode} - ${data.message || ""}`);
+      }
+    } catch (e) {
+      setLog("Network error: " + e.message);
+    }
+  }
 
   return (
-    <div className="card">
-      <div className="banner" style={{marginBottom:12}}>
-        <b>Bridge URL:</b> {BRIDGE_URL || <span className="muted">[not set]</span>}
-      </div>
-      <div className="row">
-        <input placeholder="owner" value={owner} onChange={e=>setOwner(e.target.value)} />
-        <input placeholder="repo" value={repo} onChange={e=>setRepo(e.target.value)} />
-        <input placeholder="base branch" value={base} onChange={e=>setBase(e.target.value)} style={{width:160}}/>
-      </div>
-      <div className="row" style={{marginTop:8}}>
-        <input className="grow" placeholder="PR title" value={title} onChange={e=>setTitle(e.target.value)} />
-        <button onClick={submit}>Open PR</button>
-      </div>
-      <div style={{marginTop:12}}>
-        <textarea placeholder="Paste unified diff here..." value={diff} onChange={e=>setDiff(e.target.value)} />
-      </div>
-      <pre className="muted" style={{whiteSpace:'pre-wrap', marginTop:12}}>{log}</pre>
+    <div className="p-6 max-w-3xl mx-auto space-y-4">
+      <h1 className="text-2xl font-bold">Studio — Fixed Diff</h1>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <input className="border p-2 rounded" placeholder="owner" value={owner} onChange={e=>setOwner(e.target.value)} />
+          <input className="border p-2 rounded" placeholder="repo" value={repo} onChange={e=>setRepo(e.target.value)} />
+          <input className="border p-2 rounded" placeholder="base branch" value={base} onChange={e=>setBase(e.target.value)} />
+          <input className="border p-2 rounded" placeholder="PR title" value={title} onChange={e=>setTitle(e.target.value)} />
+        </div>
+        <textarea className="border p-2 rounded w-full h-64 font-mono" placeholder="paste unified diff here" value={diff} onChange={e=>setDiff(e.target.value)} />
+        <button className="bg-black text-white px-4 py-2 rounded">Open PR</button>
+      </form>
+      <pre className="bg-gray-100 p-3 rounded text-sm whitespace-pre-wrap">{log}</pre>
     </div>
-  )
+  );
 }

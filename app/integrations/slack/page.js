@@ -5,10 +5,16 @@ import { api } from "@/lib/api";
 export default function SlackConnectPage() {
   const [link, setLink] = useState(null);
   const [log, setLog] = useState("");
+
   async function getInstallUrl() {
     setLog("Requesting Slack install URL...");
-    try { const { installUrl } = await api(`/api/slack/install`, { method: "POST", body: JSON.stringify({}) }); setLink(installUrl); setLog(""); } catch (e) { setLog(e.message); }
+    try {
+      const { installUrl } = await api(`/api/slack/install`, { method: "POST", body: JSON.stringify({}) });
+      setLink(installUrl);
+      setLog("");
+    } catch (e) { setLog(e.message); }
   }
+
   return (
     <div className="p-6 max-w-xl space-y-3">
       <h1 className="text-2xl font-bold">Connect Slack</h1>

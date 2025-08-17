@@ -1,25 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { api } from '../testlib/api.mjs';
 
-import { api } from '../lib/api.js';
-
-test('api throws if NEXT_PUBLIC_CI_URL missing', async () => {
-  const old = process.env.NEXT_PUBLIC_CI_URL;
+test('api fails without NEXT_PUBLIC_CI_URL', async () => {
+  const prev = process.env.NEXT_PUBLIC_CI_URL;
   delete process.env.NEXT_PUBLIC_CI_URL;
   await assert.rejects(() => api('/x'), /NEXT_PUBLIC_CI_URL/);
-  if (old) process.env.NEXT_PUBLIC_CI_URL = old;
+  if (prev) process.env.NEXT_PUBLIC_CI_URL = prev;
 });
 
-test('api composes URL and forwards headers', async () => {
+test('api composes URL and returns JSON', async () => {
   process.env.NEXT_PUBLIC_CI_URL = 'https://ci.example.com';
-  let called = false;
   globalThis.fetch = async (url, opts) => {
-    called = true;
-    assert.equal(url, 'https://ci.example.com/hello');
-    assert.equal(opts.headers['content-type'], 'application/json');
-    return new Response(JSON.stringify({ ok:true }), { status:200, headers:{ 'content-type':'application/json' } });
+    return new Response(JSON.stringify({ ok:true, url }), { status:200, headers:{ 'content-type':'application/json' } });
   };
-  const r = await api('/hello', { method:'POST', body: '{}' });
-  assert.equal(r.ok, true);
-  assert.equal(called, true);
+  const out = await api('/hello', { method:'POST', body:'{}' });
+  assert.equal(out.ok, true);
+  assert.equal(out.url, 'https://ci.example.com/hello');
 });

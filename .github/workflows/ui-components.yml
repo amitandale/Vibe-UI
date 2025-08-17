@@ -16,8 +16,8 @@ jobs:
           node-version: 18
       - name: Install base deps
         run: npm ci || npm install
-      - name: Install test-only deps (no save)
+      - name: Install test-only deps (no save, React 18 compatible)
         run: |
-          npm i --no-save jest @testing-library/react @testing-library/jest-dom react-test-renderer babel-jest @babel/preset-env @babel/preset-react
+          npm i --no-save             jest@29             @testing-library/react@14             @testing-library/jest-dom@6             babel-jest@29             @babel/preset-env@7             @babel/preset-react@7
       - name: Run Jest UI tests
         run: npx -y jest --config ./jest.config.cjs

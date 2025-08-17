@@ -1,25 +1,33 @@
 # Vibe UI (Studio)
 
-Thin Next.js app that lets users submit diffs, view PRs/checks/previews, manage manual tests, and kick off integrations. No secrets are stored here; all mutations go through Vibe CI.
+**Role:** The user‑facing studio. Paste diffs to open PRs, manage testers, and follow PR status. Runs on the user’s Vercel.
+
+## v1 Features
+- **Studio** `/studio`: paste unified diff → open PR via CI → show PR URL
+- **PRs list** `/prs`: read‑only list with status/preview (basic for v1)
+- **Testers** `/testers`: create tester (name/email), invite
+- **Tester accept** `/tests/accept?token=...` → `/tests`
+- **Assigned tests** `/tests`: see runs/cases; pass/fail submit
+- **Slack connect** `/integrations/slack` (optional v1)
 
 ## Environment
-- `NEXT_PUBLIC_CI_URL` — Base URL of Vibe CI (our VPS), e.g. `https://ci.example.com`
+- `NEXT_PUBLIC_CI_URL=https://<your-ci-domain>`
 
-## Key Pages
-- `/studio` — Submit unified diff → CI proxy → Bridge opens PR
-- `/prs`    — Read PRs + checks (from CI)
-- `/integrations/slack` — Get Slack install URL (from CI)
+## CI & Tests
+- **Unit**: Node’s `node --test` for the API helper
+- **UI components**: Jest + Testing Library (deps installed ephemerally in CI)
+- **Playwright ready**: `playwright.config.js` + `.github/workflows/ui-e2e.yml` (placeholder)
 
-## Security
-- No server-side secrets.
-- All requests call Vibe CI over HTTPS; Vibe CI enforces auth/RBAC.
+## v1 PRs (UI)
+1. **UI‑01** Studio: paste diff → open PR → show PR URL  
+2. **UI‑02** Testers pages: invite/accept/assigned/pass‑fail  
+3. **UI‑03** PRs list: basic status + preview link (read‑only)  
+4. **UI‑04** Settings polish (Bridge URL input, validation)  
+5. **UI‑05** Slack connect page (install URL from CI)
 
-## Local Dev
-```
-npm install
-npm run dev
-# set NEXT_PUBLIC_CI_URL in .env.local
-```
+## Usage (dev)
+- Set `NEXT_PUBLIC_CI_URL`
+- Start dev server; open `/studio`, `/testers`, `/tests`
 
 ## Notes
-- File uploads (screenshots/videos) should always use signed URLs returned by Vibe CI and go directly to user storage (Blob/S3), never proxied through the UI.
+- UI stays **thin**; business logic lives in CI/Bridge.

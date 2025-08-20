@@ -1,10 +1,12 @@
 
 import './globals.css';
+import PlanBanner from './components/PlanBanner.jsx';
 export const metadata = { title: 'Vibe UI', description: 'Vibe UI' };
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body>
+        <PlanBanner />
         <div className="shell">
           <aside className="side">
             <div className="logo">Vibe UI</div>

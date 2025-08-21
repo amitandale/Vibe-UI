@@ -5,11 +5,17 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "c8 --reporter=lcov --reporter=text node --test",
+    "coverage": "c8 report --reporter=lcov"
   },
   "dependencies": {
     "next": "14.2.6",
     "react": "18.3.1",
     "react-dom": "18.3.1"
+  },
+  "type": "module",
+  "devDependencies": {
+    "c8": "^9.1.0"
   }
 }

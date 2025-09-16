@@ -1,0 +1,23 @@
+name: UI Component Tests
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  jest-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install base deps
+        run: npm ci || npm install
+      - name: Install test-only deps (no save, React 18 compatible)
+        run: |
+          npm i --no-save             jest@29             jest-environment-jsdom@29             @testing-library/react@14             @testing-library/jest-dom@6             babel-jest@29             @babel/core@7             @babel/preset-env@7             @babel/preset-react@7
+      - name: Run Jest UI tests
+        run: npx -y jest --config ./jest.config.cjs

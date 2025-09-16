@@ -1,0 +1,27 @@
+name: E2E (Playwright)
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      # Set these in repo Settings → Secrets and variables → Actions
+      BASE_URL: ${{ secrets.BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install base deps
+        run: npm ci || npm install
+      - name: Install Playwright (CI-only, no save)
+        run: |
+          npm i --no-save @playwright/test
+          npx playwright install --with-deps
+      - name: Run Playwright
+        run: npx playwright test --reporter=dot

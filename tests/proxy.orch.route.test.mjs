@@ -2,13 +2,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Import route handlers from Next App Router file
-import * as route from '../app/proxy/orch/[...path]/route.mjs';
+async function loadRoute(){
+  // Force fresh import after env is set
+  const modUrl = new URL('../app/proxy/orch/[...path]/route.mjs', import.meta.url);
+  // Add a cache-busting query to avoid ESM caching by URL
+  return await import(modUrl.href + `?ts=${Date.now()}`);
+}
 
 test('proxy signs HMAC and forwards headers correctly (GET)', async () => {
   process.env.ORCH_BASE = 'http://127.0.0.1';
   process.env.VIBE_HMAC_SECRET = 'secret';
   process.env.VIBE_KID = 'ui';
+
+  const route = await loadRoute();
 
   // Monkey-patch global fetch to capture request
   const calls = [];
@@ -51,6 +57,8 @@ test('proxy signs body for POST', async () => {
   process.env.VIBE_HMAC_SECRET = 'secret';
   process.env.VIBE_KID = 'ui';
 
+  const route = await loadRoute();
+
   const calls = [];
   const origFetch = globalThis.fetch;
   globalThis.fetch = async (url, init={}) => { calls.push({ url, init }); return new Response('{}', { status:200 }); };
@@ -60,8 +68,8 @@ test('proxy signs body for POST', async () => {
     const req = new Request('http://localhost/proxy/orch/app/api/billing/budgets', { method: 'POST', body, headers: { 'content-type':'application/json' } });
     await route.POST(req, { params: { path: ['app','api','billing','budgets'] } });
     const { init } = calls[0];
-    // Signature must be a hex string
-    assert.ok(/^[0-9a-f]+$/.test(init.headers['x-signature']));
+    // Signature must be a hex string and present
+    assert.ok(typeof init.headers['x-signature'] === 'string' && /^[0-9a-f]+$/.test(init.headers['x-signature']));
     // Content-type preserved
     assert.equal(init.headers['content-type'], 'application/json');
   } finally {

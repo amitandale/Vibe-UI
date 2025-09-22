@@ -16,6 +16,10 @@ function LineChart({ points }){
 }
 
 export default function BillingPage(){
+  const enabled = (process.env.NEXT_PUBLIC_STUDIO_BILLING || process.env.studio?.billing) === 'on';
+
+  if (!enabled) { return <div className="p-6">Billing is disabled.</div>; }
+
   const [budgets, setBudgets] = useState(null);
   const [summary, setSummary] = useState(null);
   const [events, setEvents] = useState([]);

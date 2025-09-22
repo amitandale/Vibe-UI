@@ -1,3 +1,4 @@
+import Link from 'next/link'
 
 import './globals.css';
 import PlanBanner from './components/PlanBanner.jsx';
@@ -11,11 +12,11 @@ export default function RootLayout({ children }) {
           <aside className="side">
             <div className="logo">Vibe UI</div>
             <nav style={{marginTop:12}}>
-              <a href="/">Home</a>
-              <a href="/studio">Studio</a>
-              <a href="/prs">PRs</a>
-              <a href="/context">Context</a>
-              <a href="/settings">Settings</a>
+              <Link href="/">Home</Link>
+              <Link href="/studio">Studio</Link>
+              <Link href="/prs">PRs</Link>
+              <Link href="/context">Context</Link>
+              <Link href="/settings">Settings</Link>
             </nav>
           </aside>
           <main className="main">

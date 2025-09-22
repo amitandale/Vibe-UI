@@ -1,3 +1,4 @@
+import Link from 'next/link'
 // app/projects/page.js
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function ProjectsPage(){
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Projects</h1>
-        <a href="/projects/new" className="px-3 py-2 rounded-lg border">New Project</a>
+        <Link href="/projects/new" className="px-3 py-2 rounded-lg border">New Project</Link>
       </div>
       {items.length === 0 ? (
         <Card>No projects yet.</Card>

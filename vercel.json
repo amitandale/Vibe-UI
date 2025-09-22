@@ -1,4 +1,0 @@
-{
-  "version": 2,
-  "buildCommand": "node scripts/prebuild.js && npm run build"
-}

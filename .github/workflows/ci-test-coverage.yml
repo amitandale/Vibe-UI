@@ -5,7 +5,6 @@ on:
 jobs:
   test-coverage:
     runs-on: [self-hosted, linux]
-    strategy:
     env:
       NODE_V8_COVERAGE: coverage/tmp
       PROFILE: default

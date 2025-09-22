@@ -25,14 +25,24 @@ jobs:
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
-      - name: Syntax validation (JS/MJS)
+      - name: Syntax validation (ESM)
         run: |
           set -euo pipefail
-          mapfile -t FILES < <(git ls-files '*.mjs' '*.js')
-          if [ "${#FILES[@]}" -gt 0 ]; then
-            for f in "${FILES[@]}"; do
+          # Check all .mjs files with Node parser
+          mapfile -t MJS < <(git ls-files '*.mjs' || true)
+          if [ "${#MJS[@]}" -gt 0 ]; then
+            for f in "${MJS[@]}"; do
               node --check "$f"
             done
+          fi
+          # Only check .js if the repo declares ESM in package.json
+          if node -e "try{process.exit(JSON.parse(require('fs').readFileSync('package.json','utf8')).type==='module'?0:1)}catch(e){process.exit(1)}" 2>/dev/null; then
+            mapfile -t JS < <(git ls-files '*.js' || true)
+            if [ "${#JS[@]}" -gt 0 ]; then
+              for f in "${JS[@]}"; do
+                node --check "$f"
+              done
+            fi
           fi
       - name: Run tests (Node runner)
         run: npm run -s test

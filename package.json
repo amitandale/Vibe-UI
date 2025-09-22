@@ -3,15 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "test": "node --test --test-reporter=tap tests",
-    "lint": "echo 'lint placeholder'"
+    "check:esm": "bash -lc \"find . -path ./node_modules -prune -o -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check\"",
+    "check:jsx": "node tools/parse-jsx.mjs"
   },
-  "dependencies": {
-    "next": "14.2.5",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+  "devDependencies": {
+    "@babel/parser": "^7.25.0"
   }
 }

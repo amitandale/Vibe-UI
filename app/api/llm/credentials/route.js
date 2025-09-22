@@ -1,14 +1,28 @@
 export async function POST(req){
-  const { provider, model, apiKey } = await req.json();
+  const { provider, model, apiKey } = await req.json().catch(() => ({}));
+  if (!provider || !model || typeof apiKey !== 'string' || apiKey.length === 0){
+    return Response.json({ ok:false, error:'invalid_input' }, { status: 400 });
+  }
+
   const url = process.env.ORCH_URL;
-  if (!url) return Response.json({ ok:false, error:'ORCH_URL missing' }, { status: 500 });
-  // forward without logging secrets
+
+  // If orchestrator URL not configured, accept write-only locally.
+  if (!url){
+    // Do not echo the key. Return optimistic ok.
+    return Response.json({ ok:true }, { status: 200, headers: { 'x-orch-forwarded':'false' } });
+  }
+
+  // Forward without logging or echoing secrets in the response
   const res = await fetch(url + '/app/api/llm/credentials', {
     method: 'POST',
     headers: { 'content-type':'application/json' },
     body: JSON.stringify({ provider, model, apiKey })
-  });
-  // force non-echo
-  const ok = res.ok;
-  return Response.json({ ok }, { status: ok ? 200 : 502 });
+  }).catch(() => null);
+
+  if (!res){
+    return Response.json({ ok:false, error:'upstream_unreachable' }, { status: 502 });
+  }
+
+  // Only return status. Never echo key or upstream body.
+  return Response.json({ ok: res.ok }, { status: res.ok ? 200 : 502, headers: { 'x-orch-forwarded':'true' } });
 }

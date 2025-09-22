@@ -1,9 +1,13 @@
 name: E2E (Playwright)
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
 jobs:
   e2e:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     env:
       # Set these in repo Settings → Secrets and variables → Actions
       BASE_URL: ${{ secrets.BASE_URL }}

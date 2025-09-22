@@ -1,0 +1,84 @@
+name: Deploy Studio
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+concurrency:
+  group: studio-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'work' || github.event.workflow_run.head_branch == 'main') }}
+    runs-on: [self-hosted, linux, x64]
+    environment:
+      name: ${{ github.event.workflow_run.head_branch == 'work' && 'dev' || 'prod' }}
+
+    env:
+      SRV_DIR: /srv/vibe/vibe-ui
+      ENV_DIR: /etc/vibe
+      ENV_FILE: /etc/vibe/studio.env
+      SERVICE: vibe-studio
+
+    steps:
+      - name: Checkout target SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Bootstrap system user, dirs, and unit
+        run: |
+          set -euxo pipefail
+          sudo id -u vibe >/dev/null 2>&1 || sudo useradd -r -s /usr/sbin/nologin vibe
+          sudo install -d -m 755 /srv/vibe
+          sudo install -d -m 755 "$SRV_DIR"
+          sudo install -d -m 755 "$ENV_DIR"
+          sudo install -m 644 ./.deploy/systemd/vibe-studio.service /etc/systemd/system/vibe-studio.service
+
+      - name: Build-time env for Next.js
+        run: |
+          set -euxo pipefail
+          cat > .env.production.local <<'EOF'
+          NEXT_PUBLIC_STUDIO_BILLING=on
+          EOF
+
+      - name: Install deps and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Stop service before deploy
+        run: |
+          sudo systemctl stop $SERVICE || true
+
+      - name: Sync build to /srv
+        run: |
+          set -euxo pipefail
+          sudo rsync -a --delete --exclude '.git' --exclude 'node_modules' ./ "$SRV_DIR/"
+          sudo chown -R vibe:vibe "$SRV_DIR"
+
+      - name: Write runtime env (from environment secrets/vars)
+        run: |
+          set -euxo pipefail
+          sudo install -m 600 /dev/stdin "$ENV_FILE" <<'EOF'
+          NODE_ENV=production
+          PORT=${{ vars.STUDIO_PORT || 3001 }}
+          VIBE_HMAC_SECRET=${{ secrets.VIBE_HMAC_SECRET }}
+          ORCH_URL=http://127.0.0.1
+          EOF
+
+      - name: Start and enable service
+        run: |
+          set -euxo pipefail
+          sudo systemctl daemon-reload
+          sudo systemctl enable $SERVICE
+          sudo systemctl start $SERVICE
+          sleep 2
+          sudo systemctl --no-pager --full status $SERVICE || true
+
+      - name: Health check
+        run: |
+          set -euxo pipefail
+          curl -sSf "http://127.0.0.1:${{ vars.STUDIO_PORT || 3001 }}/app/api/billing/prices" >/dev/null

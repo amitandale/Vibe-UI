@@ -1,0 +1,16 @@
+[Unit]
+Description=Vibe Studio (Next.js UI)
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/vibe/studio.env
+WorkingDirectory=/srv/vibe/vibe-ui
+ExecStart=/usr/bin/npm run start -- --port=${PORT:-3001}
+Restart=on-failure
+RestartSec=2
+User=vibe
+Group=vibe
+
+[Install]
+WantedBy=multi-user.target

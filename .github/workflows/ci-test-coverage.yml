@@ -70,14 +70,14 @@ jobs:
         run: |
           set -euo pipefail
           echo "node $(node -v); npm $(npm -v)"
-          echo "::group::List test files"
-          find . -path ./node_modules -prune -o -type f \
-            -regex '.*\.test\.(js\|jsx\|mjs\|ts\|tsx)$' -print | sort || true
-          echo "::endgroup::"
-          echo "::group::npm test output"
-          npm test || { code=$?; echo "::endgroup::"; \
-            echo "::group::node --test direct output"; node --test || true; echo "::endgroup::"; exit $code; }
-          echo "::endgroup::"
+          # If package.json has a test script, use it; else run node --test directly
+          if node -e "try{process.exit(require('./package.json').scripts && require('./package.json').scripts.test ? 0 : 1)}catch(e){process.exit(1)}" ; then
+            echo "Running npm test"
+            npm run -s test
+          else
+            echo "No npm test script. Running node --test"
+            node --test
+          fi
       - name: Coverage summary (text)
         run: npx c8 report --reporter=text
       - name: Coverage artifact (lcov)

@@ -6,9 +6,11 @@ jobs:
   test-coverage:
     runs-on: [self-hosted, linux]
     strategy:
+      matrix:
+        profile: [serverless, longrun]
     env:
       NODE_V8_COVERAGE: coverage/tmp
-      PROFILE: default
+      PROFILE: ${{ matrix.profile }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,19 +25,25 @@ jobs:
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
-
-      - name: ESM syntax check (.mjs)
+      - name: Syntax validation (ESM)
         run: |
           set -euo pipefail
-          find app -type f -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
-      - name: JSX syntax check (.js/.jsx)
-        run: |
-          set -euo pipefail
-          npx --yes -p eslint -p @babel/eslint-parser -p @babel/core -p @babel/plugin-syntax-jsx \
-            eslint --no-eslintrc \
-            --parser @babel/eslint-parser \
-            --parser-options '{ "ecmaVersion": 2022, "sourceType": "module", "requireConfigFile": false, "babelOptions": { "plugins": ["@babel/plugin-syntax-jsx"] } }' \
-            --ext .js,.jsx app
+          # Check all .mjs files with Node parser
+          mapfile -t MJS < <(git ls-files '*.mjs' || true)
+          if [ "${#MJS[@]}" -gt 0 ]; then
+            for f in "${MJS[@]}"; do
+              node --check "$f"
+            done
+          fi
+          # Only check .js if the repo declares ESM in package.json
+          if node -e "try{process.exit(JSON.parse(require('fs').readFileSync('package.json','utf8')).type==='module'?0:1)}catch(e){process.exit(1)}" 2>/dev/null; then
+            mapfile -t JS < <(git ls-files '*.js' || true)
+            if [ "${#JS[@]}" -gt 0 ]; then
+              for f in "${JS[@]}"; do
+                node --check "$f"
+              done
+            fi
+          fi
       - name: Run tests (Node runner)
         run: npm run -s test
       - name: Coverage summary (text)

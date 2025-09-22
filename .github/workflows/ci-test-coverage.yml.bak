@@ -68,16 +68,9 @@ jobs:
       - name: Run tests (Node runner)
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
           echo "node $(node -v); npm $(npm -v)"
-          echo "::group::List test files"
-          find . -path ./node_modules -prune -o -type f \
-            -regex '.*\.test\.(js\|jsx\|mjs\|ts\|tsx)$' -print | sort || true
-          echo "::endgroup::"
-          echo "::group::npm test output"
-          npm test || { code=$?; echo "::endgroup::"; \
-            echo "::group::node --test direct output"; node --test || true; echo "::endgroup::"; exit $code; }
-          echo "::endgroup::"
+          npm run -s test || { code=$?; echo "::error::npm test failed"; exit $code; }
       - name: Coverage summary (text)
         run: npx c8 report --reporter=text
       - name: Coverage artifact (lcov)

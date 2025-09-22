@@ -35,6 +35,18 @@ jobs:
             --parser @babel/eslint-parser \
             --parser-options '{ "ecmaVersion": 2022, "sourceType": "module", "requireConfigFile": false, "babelOptions": { "plugins": ["@babel/plugin-syntax-jsx"] } }' \
             --ext .js,.jsx app
+      - name: Syntax validation (ESM)
+        run: |
+          set -euo pipefail
+          find app -type f -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
+      - name: Syntax validation (JSX)
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' f; do
+            npx --yes -p @babel/core -p @babel/cli -p @babel/plugin-syntax-jsx \
+              babel "$f" --config-file /dev/null --no-babelrc \
+              --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
+          done < <(find app -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
       - name: Run tests (Node runner)
         run: npm run -s test
       - name: Coverage summary (text)
@@ -44,6 +56,6 @@ jobs:
       - name: Upload lcov
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-lcov-${{ matrix.profile }}
+          name: coverage-lcov-default
           path: coverage/lcov.info
           if-no-files-found: ignore

@@ -35,24 +35,32 @@ jobs:
         run: mkdir -p coverage/tmp
 
 
-      - name: Syntax validation (ESM .mjs across repo)
+      - name: Syntax validation (ESM .mjs repo-wide)
         run: |
           set -euo pipefail
-          if [ -d . ]; then
-            while IFS= read -r -d '' f; do
-              node --check "$f"
-            done < <(find . -path ./node_modules -prune -o -type f -name '*.mjs' -print0)
-          fi
-      - name: Syntax validation (JSX .js/.jsx across repo via local Babel)
+          while IFS= read -r -d '' f; do
+            node --check "$f"
+          done < <(find . \
+                   -path ./node_modules -prune -o \
+                   -path ./.next -prune -o \
+                   -path ./coverage -prune -o \
+                   -path ./dist -prune -o \
+                   -path ./build -prune -o \
+                   -type f -name '*.mjs' -print0)
+      - name: Syntax validation (JSX .js/.jsx repo-wide via npx Babel)
         run: |
           set -euo pipefail
-          if [ -x ./node_modules/.bin/babel ]; then
-            while IFS= read -r -d '' f; do
-              ./node_modules/.bin/babel "$f" --config-file /dev/null --no-babelrc --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
-            done < <(find . -path ./node_modules -prune -o -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
-          else
-            echo "Babel CLI not found; skipping JSX syntax parse. Add devDeps: @babel/core @babel/cli @babel/plugin-syntax-jsx to enable."
-          fi
+          while IFS= read -r -d '' f; do
+            npx --yes -p @babel/core -p @babel/cli -p @babel/plugin-syntax-jsx \
+              babel "$f" --config-file /dev/null --no-babelrc \
+              --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
+          done < <(find . \
+                   -path ./node_modules -prune -o \
+                   -path ./.next -prune -o \
+                   -path ./coverage -prune -o \
+                   -path ./dist -prune -o \
+                   -path ./build -prune -o \
+                   -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
 
       - name: Run tests (Node runner)
         run: npm run -s test

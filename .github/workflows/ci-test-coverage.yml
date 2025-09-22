@@ -4,7 +4,7 @@ on:
   pull_request:
 jobs:
   test-coverage:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     strategy:
       matrix:
         profile: [serverless, longrun]
@@ -25,6 +25,15 @@ jobs:
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
+      - name: Syntax validation (JS/MJS)
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(git ls-files '*.mjs' '*.js')
+          if [ "${#FILES[@]}" -gt 0 ]; then
+            for f in "${FILES[@]}"; do
+              node --check "$f"
+            done
+          fi
       - name: Run tests (Node runner)
         run: npm run -s test
       - name: Coverage summary (text)

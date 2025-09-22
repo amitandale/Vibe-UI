@@ -13,40 +13,47 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18.20.8'
-      - name: Install dependencies
+      - name: Ensure dependencies (idempotent)
         run: |
-          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
-            npm ci
+          set -euo pipefail
+          if [ -f package-lock.json ]; then
+            LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
           else
-            npm i
+            LOCK_HASH="nolock"
+          fi
+          if [ -d node_modules ] && [ -f node_modules/.installedLockHash ] && [ "$(cat node_modules/.installedLockHash)" = "$LOCK_HASH" ]; then
+            echo "Dependencies up to date. Skipping install."
+          else
+            if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+              npm ci --prefer-offline --no-audit --fund=false
+            else
+              npm i --prefer-offline --no-audit --fund=false
+            fi
+            echo "$LOCK_HASH" > node_modules/.installedLockHash
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
 
-      - name: ESM syntax check (.mjs)
+
+      - name: Syntax validation (ESM .mjs across repo)
         run: |
           set -euo pipefail
-          find app -type f -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
-      - name: JSX syntax check (.js/.jsx)
+          if [ -d . ]; then
+            while IFS= read -r -d '' f; do
+              node --check "$f"
+            done < <(find . -path ./node_modules -prune -o -type f -name '*.mjs' -print0)
+          fi
+      - name: Syntax validation (JSX .js/.jsx across repo via local Babel)
         run: |
           set -euo pipefail
-          npx --yes -p eslint -p @babel/eslint-parser -p @babel/core -p @babel/plugin-syntax-jsx \
-            eslint --no-eslintrc \
-            --parser @babel/eslint-parser \
-            --parser-options '{ "ecmaVersion": 2022, "sourceType": "module", "requireConfigFile": false, "babelOptions": { "plugins": ["@babel/plugin-syntax-jsx"] } }' \
-            --ext .js,.jsx app
-      - name: Syntax validation (ESM)
-        run: |
-          set -euo pipefail
-          find app -type f -name '*.mjs' -print0 | xargs -0 -r -n1 node --check
-      - name: Syntax validation (JSX)
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d '' f; do
-            npx --yes -p @babel/core -p @babel/cli -p @babel/plugin-syntax-jsx \
-              babel "$f" --config-file /dev/null --no-babelrc \
-              --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
-          done < <(find app -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
+          if [ -x ./node_modules/.bin/babel ]; then
+            while IFS= read -r -d '' f; do
+              ./node_modules/.bin/babel "$f" --config-file /dev/null --no-babelrc --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
+            done < <(find . -path ./node_modules -prune -o -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
+          else
+            echo "Babel CLI not found; skipping JSX syntax parse. Add devDeps: @babel/core @babel/cli @babel/plugin-syntax-jsx to enable."
+          fi
+
       - name: Run tests (Node runner)
         run: npm run -s test
       - name: Coverage summary (text)

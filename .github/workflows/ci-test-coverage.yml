@@ -25,10 +25,11 @@ jobs:
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
-      - name: Syntax validation (JS/MJS)
+      - name: Syntax validation (Node-parsable only)
         run: |
           set -euo pipefail
-          mapfile -t FILES < <(git ls-files '*.mjs' '*.js')
+          # Check only files Node can parse without a transpiler
+          mapfile -t FILES < <(git ls-files '*.mjs' '*.cjs' || true)
           if [ "${#FILES[@]}" -gt 0 ]; then
             for f in "${FILES[@]}"; do
               node --check "$f"

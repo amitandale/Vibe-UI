@@ -67,10 +67,8 @@ jobs:
 
       - name: Run tests (Node runner)
         shell: bash
-        run: |
-          set -e
-          echo "node $(node -v); npm $(npm -v)"
-          npm run -s test || { code=$?; echo "::error::npm test failed"; exit $code; }
+        run: npm run -s test
+
       - name: Coverage summary (text)
         run: npx c8 report --reporter=text
       - name: Coverage artifact (lcov)

@@ -13,41 +13,36 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '18.20.8'
-      - name: Ensure dependencies (idempotent)
+      - name: Ensure dependencies (idempotent, Ubuntu)
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -f package-lock.json ]; then
-            LOCK_HASH="$(sha256sum package-lock.json | cut -d' ' -f1)"
-          else
-            LOCK_HASH="nolock"
-          fi
-          if [ -d node_modules ] && [ -f node_modules/.installedLockHash ] && [ "$(cat node_modules/.installedLockHash)" = "$LOCK_HASH" ]; then
+          LOCK_HASH="$(test -f package-lock.json && sha256sum package-lock.json | cut -d' ' -f1 || echo nolock)"
+          if [[ -d node_modules && -f node_modules/.installedLockHash && "$(cat node_modules/.installedLockHash)" == "$LOCK_HASH" ]]; then
             echo "Dependencies up to date. Skipping install."
           else
-            if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
+            if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
               npm ci --prefer-offline --no-audit --fund=false
             else
               npm i --prefer-offline --no-audit --fund=false
             fi
+            mkdir -p node_modules
             echo "$LOCK_HASH" > node_modules/.installedLockHash
           fi
       - name: Prepare coverage directory
         run: mkdir -p coverage/tmp
 
 
+
       - name: Syntax validation (ESM .mjs repo-wide)
+        shell: bash
         run: |
           set -euo pipefail
-          while IFS= read -r -d '' f; do
-            node --check "$f"
-          done < <(find . \
-                   -path ./node_modules -prune -o \
-                   -path ./.next -prune -o \
-                   -path ./coverage -prune -o \
-                   -path ./dist -prune -o \
-                   -path ./build -prune -o \
-                   -type f -name '*.mjs' -print0)
-      - name: Syntax validation (JS/JSX/TS/TSX via @babel/parser, repo-wide)
+          mapfile -d '' FILES < <(find . -path ./node_modules -prune -o -path ./.next -prune -o -path ./coverage -prune -o -path ./dist -prune -o -path ./build -prune -o -type f -name '*.mjs' -print0)
+          echo "ESM files: ${#FILES[@]}"
+          for f in "${FILES[@]}"; do node --check "$f"; done
+      - name: Syntax validation (JS/JSX/TS/TSX via @babel/parser)
+        shell: bash
         run: |
           set -euo pipefail
           npx --yes -p @babel/parser node - <<'NODE'
@@ -55,30 +50,27 @@ jobs:
           const parser=require('@babel/parser');
           const skip=new Set(['node_modules','.next','coverage','dist','build']);
           const exts=new Set(['.js','.jsx','.ts','.tsx']);
-          function* walk(dir){
-            for(const ent of fs.readdirSync(dir,{withFileTypes:true})){
-              if(ent.name.startsWith('.git')) continue;
-              const p=path.join(dir,ent.name);
-              if(ent.isDirectory()){ if(!skip.has(ent.name)) yield* walk(p); continue; }
-              if(exts.has(path.extname(ent.name))) yield p;
-            }
+          let count=0, failed=0;
+          function* walk(d){ for(const e of fs.readdirSync(d,{withFileTypes:true})){
+            if(e.name.startsWith('.git')) continue; const p=path.join(d,e.name);
+            if(e.isDirectory()){ if(!skip.has(e.name)) yield* walk(p); continue; }
+            if(exts.has(path.extname(e.name))) yield p;
+          } }
+          for(const f of walk(process.cwd())){ 
+            count++; const code=fs.readFileSync(f,'utf8'); 
+            try{ parser.parse(code,{sourceType:'module',allowReturnOutsideFunction:true,plugins:['jsx','typescript','importMeta','topLevelAwait']}); }
+            catch(e){ console.error('\nSyntax error in', f); console.error(e.message); failed=1; }
           }
-          let failed=0;
-          for(const f of walk(process.cwd())){
-            const code=fs.readFileSync(f,'utf8');
-            try{ 
-              parser.parse(code,{sourceType:'module',allowReturnOutsideFunction:true,plugins:['jsx','typescript','importMeta','topLevelAwait']}); 
-            }catch(e){ 
-              console.error('\nSyntax error in', f); 
-              console.error(e.message); 
-              failed=1; 
-            }
-          }
+          console.log('JS-like files:', count);
           process.exit(failed);
           NODE
 
       - name: Run tests (Node runner)
-        run: npm run -s test
+        shell: bash
+        run: |
+          set -e
+          echo "node $(node -v); npm $(npm -v)"
+          npm run -s test || { code=$?; echo "::error::npm test failed"; exit $code; }
       - name: Coverage summary (text)
         run: npx c8 report --reporter=text
       - name: Coverage artifact (lcov)

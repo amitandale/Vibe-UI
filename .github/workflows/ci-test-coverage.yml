@@ -47,20 +47,35 @@ jobs:
                    -path ./dist -prune -o \
                    -path ./build -prune -o \
                    -type f -name '*.mjs' -print0)
-      - name: Syntax validation (JSX .js/.jsx repo-wide via npx Babel)
+      - name: Syntax validation (JS/JSX/TS/TSX via @babel/parser, repo-wide)
         run: |
           set -euo pipefail
-          while IFS= read -r -d '' f; do
-            npx --yes -p @babel/core -p @babel/cli -p @babel/plugin-syntax-jsx \
-              babel "$f" --config-file /dev/null --no-babelrc \
-              --plugins @babel/plugin-syntax-jsx --filename "$f" -o /dev/null
-          done < <(find . \
-                   -path ./node_modules -prune -o \
-                   -path ./.next -prune -o \
-                   -path ./coverage -prune -o \
-                   -path ./dist -prune -o \
-                   -path ./build -prune -o \
-                   -type f \( -name '*.js' -o -name '*.jsx' \) -print0)
+          npx --yes -p @babel/parser node - <<'NODE'
+          const fs=require('fs'), path=require('path'); 
+          const parser=require('@babel/parser');
+          const skip=new Set(['node_modules','.next','coverage','dist','build']);
+          const exts=new Set(['.js','.jsx','.ts','.tsx']);
+          function* walk(dir){
+            for(const ent of fs.readdirSync(dir,{withFileTypes:true})){
+              if(ent.name.startsWith('.git')) continue;
+              const p=path.join(dir,ent.name);
+              if(ent.isDirectory()){ if(!skip.has(ent.name)) yield* walk(p); continue; }
+              if(exts.has(path.extname(ent.name))) yield p;
+            }
+          }
+          let failed=0;
+          for(const f of walk(process.cwd())){
+            const code=fs.readFileSync(f,'utf8');
+            try{ 
+              parser.parse(code,{sourceType:'module',allowReturnOutsideFunction:true,plugins:['jsx','typescript','importMeta','topLevelAwait']}); 
+            }catch(e){ 
+              console.error('\nSyntax error in', f); 
+              console.error(e.message); 
+              failed=1; 
+            }
+          }
+          process.exit(failed);
+          NODE
 
       - name: Run tests (Node runner)
         run: npm run -s test

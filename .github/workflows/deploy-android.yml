@@ -1,0 +1,76 @@
+name: Deploy Android
+
+on:
+  workflow_run:
+    workflows: ["ci-test-coverage"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-android-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.head_branch == 'work' || github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.out.outputs.sha }}
+      branch: ${{ steps.out.outputs.branch }}
+      env: ${{ steps.out.outputs.env }}
+    steps:
+      - id: out
+        run: |
+          echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event.workflow_run.head_branch }}" = "main" ]; then
+            echo "env=prod" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-sign:
+    needs: gate
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_SHA: ${{ needs.gate.outputs.sha }}
+      DEPLOY_BRANCH: ${{ needs.gate.outputs.branch }}
+      DEPLOY_ENV: ${{ needs.gate.outputs.env }}
+    steps:
+      - name: Checkout tested SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle caching
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build release
+        run: ./gradlew assembleRelease
+
+      - name: Import keystore
+        if: ${{ env.DEPLOY_ENV == 'dev' || env.DEPLOY_ENV == 'prod' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android.keystore
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ env.DEPLOY_ENV }}-${{ env.DEPLOY_SHA }}
+          path: app/build/outputs/**/*.apk

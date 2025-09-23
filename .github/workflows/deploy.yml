@@ -41,7 +41,6 @@ jobs:
           done
           echo "Timeout waiting for CI"; exit 2  deploy:
   deploy:
-    needs: gate
     runs-on: [self-hosted, linux, x64]
     needs: gate
     environment:

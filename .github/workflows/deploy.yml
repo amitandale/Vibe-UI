@@ -18,8 +18,8 @@ jobs:
     env:
       SRV_DIR: /srv/vibe/vibe-ui
       ENV_DIR: /etc/vibe
-      ENV_FILE: /etc/vibe/orchestrator.env
-      SERVICE: vibe-ui
+      ENV_FILE: /etc/vibe/vibe-ui.env
+      SERVICE: vibe-studio
 
     steps:
       - name: "Guard: require CI green for this SHA"
@@ -67,7 +67,7 @@ jobs:
           sudo install -d -m 755 /srv/vibe
           sudo install -d -m 755 "$SRV_DIR"
           sudo install -d -m 755 "$ENV_DIR"
-          sudo install -m 644 ./.deploy/systemd/vibe-orchestrator.service /etc/systemd/system/vibe-orchestrator.service
+          sudo install -m 644 ./.deploy/systemd/vibe-studio.service /etc/systemd/system/vibe-studio.service
 
       - name: Write runtime env (from environment secrets/vars)
         run: |
@@ -81,7 +81,6 @@ jobs:
           LLM_TIMEOUT_MS=${{ vars.LLM_TIMEOUT_MS || 10000 }}
           BILLING_ENFORCE=1
           LLM_API_EXPOSE=
-          ORCH_BIND=127.0.0.1
           EOF
 
       - name: Stop service before deploy
@@ -100,7 +99,7 @@ jobs:
           set -euo pipefail
           sudo -u vibe env HOME=/home/vibe bash -lc '
             set -euo pipefail;
-            cd /srv/vibe/bridge-agent && \
+            cd /srv/vibe/vibe-ui && \
             ( npm ci || ( npm install --package-lock-only && npm ci ) ) && \
             npx next build && \
             npm prune --omit=dev
@@ -108,7 +107,7 @@ jobs:
       - name: Install deps (prod)
         run: |
           set -euxo pipefail
-          sudo -u vibe bash -lc 'cd /srv/vibe/bridge-agent && npm ci --omit=dev'
+          sudo -u vibe bash -lc 'cd /srv/vibe/vibe-ui && npm ci --omit=dev'
       - name: Ensure vibe HOME
         run: |
           set -euxo pipefail
@@ -120,7 +119,7 @@ jobs:
       - name: Start and enable service
         run: |
           set -euo pipefail
-          SERVICE="${SERVICE:-vibe-ui}"
+          SERVICE="${SERVICE:-vibe-studio}"
           PORT="${{ vars.STUDIO_PORT || 3001 }}"
           UNIT="/etc/systemd/system/${SERVICE}.service"
           if [ ! -f "$UNIT" ]; then
@@ -150,7 +149,7 @@ jobs:
       - name: Health check
         run: |
           set -euo pipefail
-          URL="http://127.0.0.1:${{ vars.STUDIO_PORT || 3001 }}/api/health"
+          URL="http://127.0.0.1:${{ vars.STUDIO_PORT || 3001 }}/"
           echo "Probing ${URL}"
           for i in $(seq 1 30); do
             if curl -fsS "$URL" >/dev/null; then echo OK; exit 0; fi

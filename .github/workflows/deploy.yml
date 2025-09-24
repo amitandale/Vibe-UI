@@ -100,7 +100,7 @@ jobs:
           sudo -u vibe env HOME=/home/vibe bash -lc '
             set -euo pipefail;
             cd /srv/vibe/vibe-ui && \
-            ( npm ci || ( npm install --package-lock-only && npm ci ) ) && \
+            if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi && \
             npx next build && \
             npm prune --omit=dev
           '

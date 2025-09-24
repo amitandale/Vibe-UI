@@ -4,6 +4,12 @@
     "paths": {
       "@/*": [
         "*"
+      ],
+      "next/dist/pages/_app": [
+        "node_modules/next/app"
+      ],
+      "next/dist/pages/_document": [
+        "node_modules/next/document"
       ]
     }
   }

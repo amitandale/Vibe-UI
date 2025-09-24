@@ -107,7 +107,7 @@ jobs:
       - name: Install deps (prod)
         run: |
           set -euxo pipefail
-          sudo -u vibe bash -lc 'cd /srv/vibe/vibe-ui && npm ci --omit=dev'
+          sudo -u vibe bash -lc 'cd /srv/vibe/vibe-ui && if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi'
       - name: Ensure vibe HOME
         run: |
           set -euxo pipefail
@@ -115,7 +115,7 @@ jobs:
       - name: Install deps and build
         run: |
           set -euxo pipefail
-          sudo -u vibe env HOME=/home/vibe bash -lc 'cd /srv/vibe/vibe-ui && npm ci --omit=dev && npx next build'
+          sudo -u vibe env HOME=/home/vibe bash -lc 'cd /srv/vibe/vibe-ui && if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi && npx next build'
       - name: Start and enable service
         run: |
           set -euo pipefail

@@ -4,13 +4,21 @@ After=network.target
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/vibe/studio.env
-WorkingDirectory=/srv/vibe/vibe-ui
-ExecStart=/usr/bin/npm run start -- --port=${PORT:-3001}
-Restart=on-failure
-RestartSec=2
 User=vibe
 Group=vibe
+WorkingDirectory=/srv/vibe/vibe-ui
+EnvironmentFile=/etc/vibe/vibe-ui.env
+Environment=NODE_ENV=production
+ExecStartPre=/bin/bash -lc 'test -f /srv/vibe/vibe-ui/.next/standalone/server.js'
+ExecStartPre=/bin/bash -lc 'test -n "$PORT"'
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/vibe/vibe-ui /var/log
 
 [Install]
 WantedBy=multi-user.target

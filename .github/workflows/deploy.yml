@@ -1,87 +1,51 @@
-name: Deploy Studio
+name: Deploy Orchestrator
 
 on:
   push:
     branches: [work, main]
 
 concurrency:
-  group: studio-${{ github.ref_name }}
+  group: orchestrator-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
-  gate:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      statuses: read
-    env:
-      CI_WORKFLOW_FILE: ci-test-coverage.yml
-      CI_NAME: ci-test-coverage
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Wait for CI success
-        run: |
-          set -euo pipefail
-          : "${CI_WORKFLOW_FILE:=ci-test-coverage.yml}"
-          : "${CI_NAME:=ci-test-coverage}"
-          echo "Waiting for CI '$CI_NAME' (file=$CI_WORKFLOW_FILE) on $GITHUB_REF_NAME sha=$GITHUB_SHA"
-          for i in $(seq 1 120); do
-            json="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_FILE}/runs?branch=${GITHUB_REF_NAME}&per_page=50")" || true
-            status=2
-            echo "$json" | node -e "const fs=require('fs');const o=JSON.parse(fs.readFileSync(0,'utf8'));const sha=process.env.GITHUB_SHA;const runs=o.workflow_runs.filter(w=>w.head_sha===sha);if(!runs.length)process.exit(2);runs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));const r=runs[0];if(r.status!=='completed')process.exit(2);if(r.conclusion==='success')process.exit(0);if(['failure','cancelled','timed_out','action_required'].includes(r.conclusion))process.exit(1);process.exit(2);" || status=$?
-            if [ "${status}" = "0" ]; then
-              echo "CI succeeded"; exit 0
-            elif [ "${status}" = "1" ]; then
-              echo "CI failed"; exit 1
-            else
-              sleep 10
-            fi
-          done
-          echo "Timeout waiting for CI"; exit 2  deploy:
   deploy:
     runs-on: [self-hosted, linux, x64]
-    needs: gate
+
     environment:
       name: ${{ github.ref_name == 'work' && 'dev' || 'prod' }}
 
     env:
-      SRV_DIR: /srv/vibe/vibe-ui
+      SRV_DIR: /srv/vibe/bridge-agent
       ENV_DIR: /etc/vibe
-      ENV_FILE: /etc/vibe/studio.env
-      SERVICE: vibe-studio
+      ENV_FILE: /etc/vibe/orchestrator.env
+      SERVICE: vibe-orchestrator
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Wait for CI workflow success
-        if: ${{ github.ref_name == 'work' || github.ref_name == 'main' }}
+      - name: "Guard: require CI green for this SHA"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CI_NAME: ${{ vars.CI_WORKFLOW_NAME || 'CI' }}
+          CI_WORKFLOW_FILE: ci-test-coverage.yml
+          POLL_INTERVAL: '3'
+          MAX_WAIT_SECONDS: '900'
         run: |
           set -euo pipefail
-          echo "Waiting for CI '$CI_NAME' on $GITHUB_REF_NAME sha=$GITHUB_SHA"
-          for i in $(seq 1 90); do
-            json="$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${GITHUB_SHA}&per_page=100")"
-            code=$?
-            if [ $code -ne 0 ]; then
-              echo "API error, retrying..."; sleep 5; continue
-            fi
-            echo "$json" | node -e "const fs=require('fs');const o=JSON.parse(fs.readFileSync(0,'utf8'));const sha=process.env.GITHUB_SHA;const name=process.env.CI_NAME;const runs=o.workflow_runs.filter(w=>w.head_sha===sha && w.name===name);if(!runs.length)process.exit(2);const r=runs[0];if(r.status!=='completed')process.exit(2);if(r.conclusion==='success')process.exit(0);if(['failure','cancelled','timed_out','action_required'].includes(r.conclusion))process.exit(1);process.exit(2);" || status=$?
-            status=${status:-0}
-            if [ "${status}" = "0" ]; then
-              echo "CI succeeded"; break
-            elif [ "${status}" = "1" ]; then
-              echo "CI failed"; exit 1
-            else
-              sleep 10
-            fi
-            unset status
-          done
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/${CI_WORKFLOW_FILE}/runs?per_page=50"
+          curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$API" \
+          | node -e "
+            const fs=require('fs');
+            const o=JSON.parse(fs.readFileSync(0,'utf8')||'{}');
+            const sha=process.env.GITHUB_SHA;
+            const r=(o.workflow_runs||[]).find(w=>w.head_sha===sha);
+            if(!r){ console.error('CI run for SHA not found'); process.exit(1); }
+            if(r.status!=='completed' || r.conclusion!=='success'){
+              console.error('CI not green: status=%s conclusion=%s', r.status, r.conclusion);
+              process.exit(1);
+            }
+          "
 
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Bootstrap system user, dirs, and unit
         run: |
           set -euxo pipefail
@@ -89,43 +53,100 @@ jobs:
           sudo install -d -m 755 /srv/vibe
           sudo install -d -m 755 "$SRV_DIR"
           sudo install -d -m 755 "$ENV_DIR"
-          sudo install -m 644 ./.deploy/systemd/vibe-studio.service /etc/systemd/system/vibe-studio.service
-
-      - name: Build-time env for Next.js
-        run: |
-          set -euxo pipefail
-          cat > .env.production.local <<'EOF'
-          NEXT_PUBLIC_STUDIO_BILLING=on
-          EOF
-
-      - name: Install deps and build
-        run: |
-          npm ci
-          npm run build
-
-      - name: Stop service before deploy
-        run: |
-          sudo systemctl stop $SERVICE || true
-
-      - name: Sync build to /srv
-        run: |
-          set -euxo pipefail
-          sudo rsync -a --delete --exclude '.git' --exclude 'node_modules' ./ "$SRV_DIR/"
-          sudo chown -R vibe:vibe "$SRV_DIR"
+          sudo install -m 644 ./.deploy/systemd/vibe-orchestrator.service /etc/systemd/system/vibe-orchestrator.service
 
       - name: Write runtime env (from environment secrets/vars)
         run: |
           set -euxo pipefail
           sudo install -m 600 /dev/stdin "$ENV_FILE" <<'EOF'
           NODE_ENV=production
-          PORT=${{ vars.STUDIO_PORT || 3001 }}
+          PORT=${{ vars.ORCH_PORT || 3002 }}
           VIBE_HMAC_SECRET=${{ secrets.VIBE_HMAC_SECRET }}
-          ORCH_URL=http://127.0.0.1
+          LLM_PROVIDER=${{ vars.LLM_PROVIDER || 'mock' }}
+          LLM_MODEL=${{ vars.LLM_MODEL || 'pplx-quickstart' }}
+          LLM_TIMEOUT_MS=${{ vars.LLM_TIMEOUT_MS || 10000 }}
+          BILLING_ENFORCE=1
+          LLM_API_EXPOSE=
+          ORCH_BIND=127.0.0.1
           EOF
+
+      - name: Stop service before deploy
+        run: |
+          sudo systemctl stop $SERVICE || true
+
+      - name: Sync code to /srv
+        run: |
+          set -euxo pipefail
+          sudo rsync -a --delete --exclude '.git' --exclude 'node_modules' ./ "$SRV_DIR/"
+          sudo chown -R vibe:vibe "$SRV_DIR"
+
+      - name: Install production deps
+        working-directory: ${{ env.SRV_DIR }}
+        run: |
+          set -euo pipefail
+          sudo -u vibe env HOME=/home/vibe bash -lc '
+            set -euo pipefail;
+            cd /srv/vibe/bridge-agent && \
+            ( npm ci || ( npm install --package-lock-only && npm ci ) ) && \
+            npx next build && \
+            npm prune --omit=dev
+          '
+      - name: Install deps (prod)
+        run: |
+          set -euxo pipefail
+          sudo -u vibe bash -lc 'cd /srv/vibe/bridge-agent && npm ci --omit=dev'
+      - name: Ensure vibe HOME
+        run: |
+          set -euxo pipefail
+          sudo install -d -m 755 -o vibe -g vibe /home/vibe
+      - name: Install deps and build
+        run: |
+          set -euxo pipefail
+          sudo -u vibe env HOME=/home/vibe bash -lc 'cd /srv/vibe/bridge-agent && npm ci --omit=dev && npx next build'
+      - name: "Ensure CI is green for this SHA (fail-fast)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_WORKFLOW_FILE: ci-test-coverage.yml
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/${{GITHUB_REPOSITORY}}/actions/workflows/${{CI_WORKFLOW_FILE}}/runs?per_page=50"
+          curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$API" \
+          | node -e "
+            const fs=require('fs');
+            const o=JSON.parse(fs.readFileSync(0,'utf8')||'{}');
+            const sha=process.env.GITHUB_SHA;
+            const runs=(o.workflow_runs||[]).filter(w=>w && w.head_sha===sha);
+            if(!runs.length){ console.error('no CI run for this SHA yet'); process.exit(1); }
+            const ok=runs.some(w=>w.status==='completed' && w.conclusion==='success');
+            if(!ok){ const r=runs[0]||{}; console.error('CI not green: status=%s conclusion=%s', r.status, r.conclusion); process.exit(1); }
+          "
 
       - name: Start and enable service
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          SERVICE="${SERVICE:-bridge-agent}"
+          PORT="${{ vars.ORCH_PORT || 3002 }}"
+          UNIT="/etc/systemd/system/${SERVICE}.service"
+          if [ ! -f "$UNIT" ]; then
+            sudo tee "$UNIT" >/dev/null <<'UNIT'
+            [Unit]
+            Description=Vibe Bridge Agent
+            After=network.target
+      
+            [Service]
+            User=vibe
+            WorkingDirectory=/srv/vibe/bridge-agent
+            Environment=NODE_ENV=production
+            Environment=PORT=${PORT}
+            ExecStart=/usr/bin/env bash -lc 'npx next start -p ${PORT}'
+            Restart=always
+            RestartSec=2
+            KillSignal=SIGINT
+      
+            [Install]
+            WantedBy=multi-user.target
+            UNIT
+          fi
           sudo systemctl daemon-reload
           sudo systemctl enable $SERVICE
           sudo systemctl start $SERVICE
@@ -134,5 +155,13 @@ jobs:
 
       - name: Health check
         run: |
-          set -euxo pipefail
-          curl -sSf "http://127.0.0.1:${{ vars.STUDIO_PORT || 3001 }}/app/api/billing/prices" >/dev/null
+          set -euo pipefail
+          URL="http://127.0.0.1:${{ vars.STUDIO_PORT || 3001 }}/api/health"
+          echo "Probing ${URL}"
+          for i in $(seq 1 60); do
+            if curl -fsS "$URL" >/dev/null; then echo OK; exit 0; fi
+            sleep 1
+          done
+          echo "Service not responding"
+          curl -v "$URL"
+          exit 1

@@ -1,9 +1,4 @@
-/**
- * Next.js config (CJS) for Next 15
- * - Removes deprecated experimental.appDir
- * - Adds aliases for legacy Next internals used by some deps
- * @type {import('next').NextConfig}
- */
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config) => {
     config.resolve = config.resolve || {};
@@ -16,4 +11,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

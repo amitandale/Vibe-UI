@@ -3,8 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check:esm": "bash -lc \"find . -path ./node_modules -prune -o -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check\"",
+    "check:esm": "bash -lc \"find . -path ./node_modules -prune ...-o -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check\"",
     "check:jsx": "node tools/parse-jsx.mjs"
+  },
+  "dependencies": {
+    "next": "15.5.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@babel/parser": "^7.25.0"
